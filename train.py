@@ -1,80 +1,65 @@
-import argparse
+import os
+import shutil
+from random import random, randint, sample
+from collections import deque
+
+import numpy as np
 import torch
 import torch.nn as nn
-from collections import deque
-from random import random, randint, sample
-from time import time
-import numpy as np
-from deep_q_network import DeepQNetwork  # DQN 모델을 import
-from tetris import Tetris  # 테트리스 환경을 import
+from tensorboardX import SummaryWriter
 
+from deep_q_network import DeepQNetwork
+from tetris import Tetris
 
-def get_args():
-    parser = argparse.ArgumentParser(
-        """Implementation of Deep Q Network to play Tetris""")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--use_cuda", type=bool, default=True)
-
-    parser.add_argument("--render", type=bool, default=False, help='flag - video render')
-    parser.add_argument("--width", type=int, default=10, help="이미지의 공통 너비")
-    parser.add_argument("--height", type=int, default=20, help="이미지의 공통 높이")
-    parser.add_argument("--block_size", type=int, default=30, help="블록의 크기")
-
-    parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--initial_epsilon", type=float, default=1)
-    parser.add_argument("--final_epsilon", type=float, default=1e-3)
-    parser.add_argument("--num_decay_epochs", type=float, default=700) # epoch의 3/4정도로 설정
-
-    parser.add_argument("--num_epochs", type=int, default=1000)
-    parser.add_argument("--batch_size", type=int, default=512, help="배치 당 이미지 수")
-    parser.add_argument("--lr", type=float, default=1e-3)
-
-    parser.add_argument("--save_interval", type=int, default=1000)
-    parser.add_argument("--replay_memory_size", type=int, default=30000, help="재생 메모리 크기")
-
-    parser.add_argument("--load_model", type=bool, default=False)
-    parser.add_argument("--model_path", type=str, default="trained_models")
-
-    parser.add_argument("--max_steps", type=int, default=2000, help="에피소드 당 최대 행동 수")
-
-    args = parser.parse_args()
-    return args
-
+# 파라메터 조정
+SEED = 42
+USE_CUDA = True
+RENDER = False  # 트레이닝 과정 테트리스 출력 여부
+WIDTH = 10
+HEIGHT = 20
+BLOCK_SIZE = 30
+GAMMA = 0.99
+INITIAL_EPSILON = 1
+FINAL_EPSILON = 1e-3
+DECAY_EPOCHS = 70
+EPOCHS = 100
+BATCH_SIZE = 512
+MAX_STEPS = 2000
+LOG_PATH = "tensorboard"
+SAVE_INTERVAL = 1000
+DROP_SPEED = 0  # 블록이 떨어지는 속도 (초), 0 설정시 비활성화
 
 class Agent:
-    def __init__(self, opt, device):
-        self.epsilon = opt.initial_epsilon
-        self.initial_epsilon, self.final_epsilon = opt.initial_epsilon, opt.final_epsilon
-        self.epsilon_decay_step = opt.num_decay_epochs
+    def __init__(self, device):
+        self.epsilon = INITIAL_EPSILON
+        self.initial_epsilon, self.final_epsilon = INITIAL_EPSILON, FINAL_EPSILON
+        self.epsilon_decay_step = DECAY_EPOCHS
 
-        self.batch_size = opt.batch_size
+        self.batch_size = BATCH_SIZE
         self.update_target_rate = 10000
 
-        self.replay_memory = deque(maxlen=opt.replay_memory_size)
+        self.replay_memory = deque(maxlen=30000)
 
         # 모델 생성
-        if opt.load_model:
-            model = torch.load(opt.model_path)
-        else:
-            model = DeepQNetwork()
-        self.main_q_network = model.to(device)
+        model = DeepQNetwork()  # 모델 여기에다 수정
+        self.main_network = model.to(device)
         self.target_q_network = model.to(device)
         self.target_q_network.eval()
-        self.update_target_q_network()
+        self.update_target()
 
     # epsilon 값을 계산하는 함수
     def calc_epsilon(self, epoch):
-        epsilon = opt.final_epsilon + (max(opt.num_decay_epochs - epoch, 0) * (
-                opt.initial_epsilon - opt.final_epsilon) / opt.num_decay_epochs)
+        epsilon = FINAL_EPSILON + (max(DECAY_EPOCHS - epoch, 0) * (
+                INITIAL_EPSILON - FINAL_EPSILON) / DECAY_EPOCHS)
         return epsilon
 
     # 타겟 네트워크를 업데이트하는 함수
-    def update_target_q_network(self):
-        self.target_q_network.load_state_dict(self.main_q_network.state_dict())
+    def update_target(self):
+        self.target_q_network.load_state_dict(self.main_network.state_dict())
 
     # 미니배치를 얻는 함수
     def get_minibatch(self):
-        batch = sample(self.replay_memory, min(len(self.replay_memory), opt.batch_size))
+        batch = sample(self.replay_memory, min(len(self.replay_memory), BATCH_SIZE))
         state_batch, reward_batch, next_state_batch, done_batch = zip(*batch)
         state_batch = torch.stack(tuple(state for state in state_batch))
         reward_batch = torch.from_numpy(np.array(reward_batch, dtype=np.float32)[:, None])
@@ -82,26 +67,31 @@ class Agent:
         return state_batch, reward_batch, next_state_batch, done_batch
 
 
-def train(opt):
+def train():
     # 시드 및 장치 설정
-    torch.manual_seed(opt.seed)
-    device = 'cuda' if opt.use_cuda and torch.cuda.is_available() else 'cpu'
+    torch.manual_seed(SEED)
+    device = 'cuda' if USE_CUDA and torch.cuda.is_available() else 'cpu'
     if device == 'cuda':
-        torch.cuda.manual_seed_all(opt.seed)
+        torch.cuda.manual_seed_all(SEED)
+
+    # 텐서보드 로깅 설정
+    if os.path.isdir(LOG_PATH):
+        shutil.rmtree(LOG_PATH)
+    os.makedirs(LOG_PATH)
+    writer = SummaryWriter(LOG_PATH)
 
     # 테트리스 환경 및 에이전트 초기화
-    env = Tetris(width=opt.width, height=opt.height, block_size=opt.block_size)
-    agent = Agent(opt, device)
+    env = Tetris(width=WIDTH, height=HEIGHT, block_size=BLOCK_SIZE, drop_speed=DROP_SPEED, render=RENDER)
+    agent = Agent(device)
 
-    optimizer = torch.optim.Adam(agent.main_q_network.parameters(), lr=opt.lr)
+    optimizer = torch.optim.Adam(agent.main_network.parameters(), lr=1e-3)
     criterion = nn.MSELoss()
 
     state = env.reset().to(device)
 
     epoch = 0
-    max_score, max_lines = 0, 0
-    total_epoch = opt.num_epochs
-    while epoch < total_epoch:
+    max_lines = 0  # 단일 정수로 초기화
+    while epoch < EPOCHS:
         step_count = 0  # 행동 수 초기화
         while True:
             next_steps = env.get_next_states()
@@ -113,10 +103,10 @@ def train(opt):
             next_actions, next_states = zip(*next_steps.items())
             next_states = torch.stack(next_states).to(device)
 
-            agent.main_q_network.eval()
+            agent.main_network.eval()
             with torch.no_grad():
-                predictions = agent.main_q_network(next_states)[:, 0]
-            agent.main_q_network.train()
+                predictions = agent.main_network(next_states)[:, 0]
+            agent.main_network.train()
             if random_action:
                 index = randint(0, len(next_steps) - 1)
             else:
@@ -124,13 +114,13 @@ def train(opt):
 
             next_state = next_states[index, :]
             action = next_actions[index]
-            reward, done = env.step(action, render=opt.render)
+            reward, done = env.step(action, render=RENDER)  # 화면에 출력
 
             agent.replay_memory.append([state, reward, next_state, done])
 
             step_count += 1  # 행동 수 증가
 
-            if done or step_count >= opt.max_steps:  # 종료 조건 확인
+            if done or step_count >= MAX_STEPS:  # 종료 조건 확인
                 final_score = env.score
                 final_num_pieces = env.tetrominoes
                 final_cleared_lines = env.cleared_lines
@@ -140,21 +130,21 @@ def train(opt):
                 state = next_state
 
         if epoch % agent.update_target_rate == 0:
-            agent.update_target_q_network()
+            agent.update_target()
 
         epoch += 1
         state_batch, reward_batch, next_state_batch, done_batch = agent.get_minibatch()
         state_batch, reward_batch, next_state_batch = state_batch.to(device), reward_batch.to(device), next_state_batch.to(device)
 
-        q_values = agent.main_q_network(state_batch)
+        q_values = agent.main_network(state_batch)
 
-        agent.main_q_network.eval()
+        agent.main_network.eval()
         with torch.no_grad():
             next_prediction_batch = agent.target_q_network(next_state_batch)
 
-        agent.main_q_network.train()
+        agent.main_network.train()
         y_batch = torch.cat(
-            tuple(reward if done else reward + opt.gamma * prediction
+            tuple(reward if done else reward + GAMMA * prediction
                   for reward, done, prediction in zip(reward_batch, done_batch, next_prediction_batch))
         )[:, None]
 
@@ -169,12 +159,23 @@ def train(opt):
 
         print("Episode: {}/{}, Score: {}, Clear lines: {}, Blocks(Actions): {}".format(
             epoch,
-            opt.num_epochs,
+            EPOCHS,
             final_score,
             final_cleared_lines,
             final_num_pieces,
             ))
 
+        # 텐서보드에 기록
+        writer.add_scalar('Train/Score', final_score, epoch)
+        writer.add_scalar('Train/Tetrominoes', final_num_pieces, epoch)
+        writer.add_scalar('Train/Cleared_lines', final_cleared_lines, epoch)
+
+        # 모델 저장
+        if epoch > 0 and epoch % SAVE_INTERVAL == 0:
+            torch.save(agent.main_network, "./tetris_model_{}".format(epoch))
+
+    torch.save(agent.main_network, "./tetris_model")
+    writer.close()
+
 if __name__ == "__main__":
-    opt = get_args()
-    train(opt)
+    train()
