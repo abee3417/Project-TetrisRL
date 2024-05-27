@@ -1,16 +1,16 @@
 import numpy as np
-from PIL import Image
-import cv2
+import pygame
+from pygame.locals import *
 from matplotlib import style
 import torch
 import random
+import time
 
 style.use("ggplot")
 
 
 class Tetris:
-
-    pieces = [ # 테트로미노 (테트리스 블록) 정의
+    pieces = [  # 테트로미노 (테트리스 블록) 정의
         [[1, 1],
          [1, 1]],
 
@@ -32,7 +32,7 @@ class Tetris:
          [7, 7, 7]]
     ]
 
-    piece_colors = [ # 테트로미노 (테트리스 블록) 색깔 정의
+    piece_colors = [  # 테트로미노 (테트리스 블록) 색깔 정의
         (0, 0, 0),
         (255, 255, 0),
         (147, 88, 254),
@@ -43,18 +43,29 @@ class Tetris:
         (0, 0, 255)
     ]
 
-    def __init__(self, height=20, width=10, block_size=20):
+    def __init__(self, height=20, width=10, block_size=20, drop_speed=1.0, render=True):
         self.height = height
         self.width = width
         self.block_size = block_size
+        self.drop_speed = drop_speed  # 블록이 떨어지는 속도
         self.bg_color = (255, 255, 255)
         self.text_color = (0, 0, 0)
-        self.extra_board = np.ones((self.height * self.block_size, self.width * int(self.block_size / 2), 3),
-                                   dtype=np.uint8) * np.array(self.bg_color, dtype=np.uint8)
+        self.extra_board_width = 200
+        self.screen_width = self.width * self.block_size + self.extra_board_width
+        self.screen_height = self.height * self.block_size
+        self.render_mode = render
+
         self.reset()
 
+        if self.render_mode:
+            # pygame 초기화
+            pygame.init()
+            self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+            pygame.display.set_caption("Deep Q-Learning Tetris")
+            self.clock = pygame.time.Clock()
+
     def reset(self):
-        self.board = [[0] * self.width for _ in range(self.height)] # 테트리스 보드 정의
+        self.board = [[0] * self.width for _ in range(self.height)]  # 테트리스 보드 정의
         self.score = 0
         self.tetrominoes = 0
         self.cleared_lines = 0
@@ -64,6 +75,7 @@ class Tetris:
         self.piece = [row[:] for row in self.pieces[self.ind]]
         self.current_pos = {"x": self.width // 2 - len(self.piece[0]) // 2, "y": 0}
         self.gameover = False
+        self.last_drop_time = time.time()  # 마지막으로 블록이 떨어진 시간
         return self.get_state_properties(self.board)
 
     def rotate(self, piece):
@@ -207,8 +219,14 @@ class Tetris:
             self.piece = self.rotate(self.piece)
 
         while not self.check_collision(self.piece, self.current_pos):
-            self.current_pos["y"] += 1
-            if render:
+            if self.drop_speed > 0:  # 0이상일때만 테트리스 블록속도 조절
+                current_time = time.time()
+                if current_time - self.last_drop_time > self.drop_speed:
+                    self.current_pos["y"] += 1
+                    self.last_drop_time = current_time
+            else:
+                self.current_pos["y"] += 1
+            if render and self.render_mode:
                 self.render(video)
 
         overflow = self.truncate(self.piece, self.current_pos)
@@ -230,42 +248,44 @@ class Tetris:
         return score, self.gameover
 
     def render(self, video=None):
-        if not self.gameover:
-            img = [self.piece_colors[p] for row in self.get_current_board_state() for p in row]
-        else:
-            img = [self.piece_colors[p] for row in self.board for p in row]
-        img = np.array(img).reshape((self.height, self.width, 3)).astype(np.uint8)
-        img = img[..., ::-1]
-        img = Image.fromarray(img, "RGB")
+        self.screen.fill(self.bg_color)
 
-        img = img.resize((self.width * self.block_size, self.height * self.block_size), 0)
-        img = np.array(img)
-        img[[i * self.block_size for i in range(self.height)], :, :] = 0
-        img[:, [i * self.block_size for i in range(self.width)], :] = 0
+        for y in range(self.height):
+            for x in range(self.width):
+                color = self.piece_colors[self.board[y][x]]
+                pygame.draw.rect(self.screen, color,
+                                 (x * self.block_size, y * self.block_size, self.block_size, self.block_size))
+                pygame.draw.rect(self.screen, (0, 0, 0),
+                                 (x * self.block_size, y * self.block_size, self.block_size, self.block_size), 1)
 
-        img = np.concatenate((img, self.extra_board), axis=1)
+        for y in range(len(self.piece)):
+            for x in range(len(self.piece[y])):
+                if self.piece[y][x]:
+                    color = self.piece_colors[self.piece[y][x]]
+                    pygame.draw.rect(self.screen, color,
+                                     ((x + self.current_pos["x"]) * self.block_size,
+                                      (y + self.current_pos["y"]) * self.block_size,
+                                      self.block_size, self.block_size))
+                    pygame.draw.rect(self.screen, (0, 0, 0),
+                                     ((x + self.current_pos["x"]) * self.block_size,
+                                      (y + self.current_pos["y"]) * self.block_size,
+                                      self.block_size, self.block_size), 1)
 
+        # 텍스트 렌더링
+        font = pygame.font.SysFont("Consolas", 20)
+        text_title = font.render(f"Tetris RL", True, self.text_color)
+        text_score = font.render(f"Score: {self.score}", True, self.text_color)
+        text_pieces = font.render(f"Pieces: {self.tetrominoes}", True, self.text_color)
+        text_lines = font.render(f"Lines: {self.cleared_lines}", True, self.text_color)
 
-        cv2.putText(img, "Score:", (self.width * self.block_size + int(self.block_size / 2), self.block_size),
-                    fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1.0, color=self.text_color)
-        cv2.putText(img, str(self.score),
-                    (self.width * self.block_size + int(self.block_size / 2), 2 * self.block_size),
-                    fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1.0, color=self.text_color)
+        self.screen.blit(text_title, (self.width * self.block_size + 10, 10))
+        self.screen.blit(text_score, (self.width * self.block_size + 10, 70))
+        self.screen.blit(text_pieces, (self.width * self.block_size + 10, 100))
+        self.screen.blit(text_lines, (self.width * self.block_size + 10, 130))
 
-        cv2.putText(img, "Pieces:", (self.width * self.block_size + int(self.block_size / 2), 4 * self.block_size),
-                    fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1.0, color=self.text_color)
-        cv2.putText(img, str(self.tetrominoes),
-                    (self.width * self.block_size + int(self.block_size / 2), 5 * self.block_size),
-                    fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1.0, color=self.text_color)
-
-        cv2.putText(img, "Lines:", (self.width * self.block_size + int(self.block_size / 2), 7 * self.block_size),
-                    fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1.0, color=self.text_color)
-        cv2.putText(img, str(self.cleared_lines),
-                    (self.width * self.block_size + int(self.block_size / 2), 8 * self.block_size),
-                    fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1.0, color=self.text_color)
+        pygame.display.flip()
 
         if video:
+            img = pygame.surfarray.array3d(self.screen)
+            img = img.swapaxes(0, 1)
             video.write(img)
-
-        cv2.imshow("Deep Q-Learning Tetris", img)
-        cv2.waitKey(1)
