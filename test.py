@@ -3,6 +3,7 @@ import torch
 import cv2
 from tetris import Tetris
 
+MODEL_NAME = "Qdeep" # Qsimp, Qdeep, Qdoub
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -25,9 +26,9 @@ def test(opt):
     else:
         torch.manual_seed(123)
     if torch.cuda.is_available():
-        model = torch.load("{}/tetris".format(opt.saved_path))
+        model = torch.load("{}_tetris_model".format(MODEL_NAME))
     else:
-        model = torch.load("{}/tetris".format(opt.saved_path), map_location=lambda storage, loc: storage)
+        model = torch.load("{}_tetris_model".format(MODEL_NAME), map_location=lambda storage, loc: storage)
     model.eval()
     env = Tetris(width=opt.width, height=opt.height, block_size=opt.block_size)
     env.reset()

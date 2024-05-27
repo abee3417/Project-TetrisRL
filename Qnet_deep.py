@@ -10,6 +10,9 @@ class DeepQNetwork(nn.Module):
 
         self._create_weights()
 
+    def get_name(self):
+        return "Qdeep"
+    
     def _create_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Linear):

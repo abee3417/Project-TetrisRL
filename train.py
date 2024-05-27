@@ -8,7 +8,10 @@ import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
 
-from deep_q_network import DeepQNetwork
+from Qnet_simple import SimpleQNetwork
+from Qnet_deep import DeepQNetwork
+from Qnet_double import DoubleQNetwork
+
 from tetris import Tetris
 
 # 파라메터 조정
@@ -41,9 +44,10 @@ class Agent:
         self.replay_memory = deque(maxlen=30000)
 
         # 모델 생성
-        model = DeepQNetwork()  # 모델 여기에다 수정
-        self.main_network = model.to(device)
-        self.target_q_network = model.to(device)
+        self.model = SimpleQNetwork()  # 모델 여기에다 수정, SimpleQNetwork, DeepQNetwork, DoubleQNetwork
+        self.model_name = self.model.get_name()
+        self.main_network = self.model.to(device)
+        self.target_q_network = self.model.to(device)
         self.target_q_network.eval()
         self.update_target()
 
@@ -172,9 +176,9 @@ def train():
 
         # 모델 저장
         if epoch > 0 and epoch % SAVE_INTERVAL == 0:
-            torch.save(agent.main_network, "./tetris_model_{}".format(epoch))
+            torch.save(agent.main_network, "./{}_tetris_model_{}".format(agent.model_name, epoch))
 
-    torch.save(agent.main_network, "./tetris_model")
+    torch.save(agent.main_network, "./{}_tetris_model".format(agent.model_name))
     writer.close()
 
 if __name__ == "__main__":
