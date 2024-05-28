@@ -17,17 +17,17 @@ from tetris import Tetris
 # 파라메터 조정
 SEED = 42
 USE_CUDA = True
-RENDER = False  # 트레이닝 과정 테트리스 출력 여부
+RENDER = True  # 트레이닝 과정 테트리스 출력 여부
 WIDTH = 10
 HEIGHT = 20
 BLOCK_SIZE = 30
 GAMMA = 0.99
 INITIAL_EPSILON = 1
 FINAL_EPSILON = 1e-3
-DECAY_EPOCHS = 70
-EPOCHS = 100
+DECAY_EPOCHS = 400
+EPOCHS = 500
 BATCH_SIZE = 512
-MAX_STEPS = 2000
+MAX_STEPS = 500
 LOG_PATH = "tensorboard"
 SAVE_INTERVAL = 1000
 DROP_SPEED = 0  # 블록이 떨어지는 속도 (초), 0 설정시 비활성화
@@ -44,7 +44,7 @@ class Agent:
         self.replay_memory = deque(maxlen=30000)
 
         # 모델 생성
-        self.model = SimpleQNetwork()  # 모델 여기에다 수정, SimpleQNetwork, DeepQNetwork, DoubleQNetwork
+        self.model = DeepQNetwork()  # 모델 여기에다 수정, SimpleQNetwork, DeepQNetwork, DoubleQNetwork
         self.model_name = self.model.get_name()
         self.main_network = self.model.to(device)
         self.target_q_network = self.model.to(device)

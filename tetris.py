@@ -61,7 +61,7 @@ class Tetris:
             # pygame 초기화
             pygame.init()
             self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-            pygame.display.set_caption("Deep Q-Learning Tetris")
+            pygame.display.set_caption("Tetris RL")
             self.clock = pygame.time.Clock()
 
     def reset(self):

@@ -30,7 +30,7 @@ def test(opt):
     else:
         model = torch.load("{}_tetris_model".format(MODEL_NAME), map_location=lambda storage, loc: storage)
     model.eval()
-    env = Tetris(width=opt.width, height=opt.height, block_size=opt.block_size)
+    env = Tetris(width=opt.width, height=opt.height, block_size=opt.block_size, drop_speed=0, render=True)
     env.reset()
     if torch.cuda.is_available():
         model.cuda()
