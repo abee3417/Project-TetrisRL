@@ -4,6 +4,7 @@ import cv2
 from tetris import Tetris
 
 MODEL_NAME = "Qdeep" # Qsimp, Qdeep, Qdoub
+EPOCH = 500 # 테스트하고싶은 모델의 epoch 입력
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -26,9 +27,9 @@ def test(opt):
     else:
         torch.manual_seed(123)
     if torch.cuda.is_available():
-        model = torch.load("{}_tetris_model".format(MODEL_NAME))
+        model = torch.load("./model/{}/tetris{}_{}".format(MODEL_NAME, MODEL_NAME, EPOCH))
     else:
-        model = torch.load("{}_tetris_model".format(MODEL_NAME), map_location=lambda storage, loc: storage)
+        model = torch.load("./model/{}/tetris{}_{}".format(MODEL_NAME, MODEL_NAME, EPOCH), map_location=lambda storage, loc: storage)
     model.eval()
     env = Tetris(width=opt.width, height=opt.height, block_size=opt.block_size, drop_speed=0, render=True)
     env.reset()

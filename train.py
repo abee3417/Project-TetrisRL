@@ -17,19 +17,19 @@ from tetris import Tetris
 # 파라메터 조정
 SEED = 42
 USE_CUDA = True
-RENDER = True  # 트레이닝 과정 테트리스 출력 여부
+RENDER = False  # 트레이닝 과정 테트리스 출력 여부
 WIDTH = 10
 HEIGHT = 20
 BLOCK_SIZE = 30
 GAMMA = 0.99
 INITIAL_EPSILON = 1
 FINAL_EPSILON = 1e-3
-DECAY_EPOCHS = 400
-EPOCHS = 500
+DECAY_EPOCHS = 100
+EPOCHS = 100
 BATCH_SIZE = 512
-MAX_STEPS = 500
+MAX_STEPS = 1000
 LOG_PATH = "tensorboard"
-SAVE_INTERVAL = 1000
+SAVE_INTERVAL = 500
 DROP_SPEED = 0  # 블록이 떨어지는 속도 (초), 0 설정시 비활성화
 
 class Agent:
@@ -82,11 +82,13 @@ def train():
     if os.path.isdir(LOG_PATH):
         shutil.rmtree(LOG_PATH)
     os.makedirs(LOG_PATH)
-    writer = SummaryWriter(LOG_PATH)
 
     # 테트리스 환경 및 에이전트 초기화
     env = Tetris(width=WIDTH, height=HEIGHT, block_size=BLOCK_SIZE, drop_speed=DROP_SPEED, render=RENDER)
     agent = Agent(device)
+
+    # SummaryWriter 생성 시 filename_suffix 지정
+    writer = SummaryWriter(LOG_PATH, filename_suffix="_{}".format(agent.model_name))
 
     optimizer = torch.optim.Adam(agent.main_network.parameters(), lr=1e-3)
     criterion = nn.MSELoss()
@@ -95,8 +97,13 @@ def train():
 
     epoch = 0
     max_lines = 0  # 단일 정수로 초기화
+    cumulative_rewards = []  # 누적 보상 리스트
+    episode_lengths = []  # 에피소드 길이 리스트
+
     while epoch < EPOCHS:
         step_count = 0  # 행동 수 초기화
+        total_reward = 0  # 누적 보상 초기화
+
         while True:
             next_steps = env.get_next_states()
 
@@ -122,6 +129,7 @@ def train():
 
             agent.replay_memory.append([state, reward, next_state, done])
 
+            total_reward += reward  # 누적 보상 업데이트
             step_count += 1  # 행동 수 증가
 
             if done or step_count >= MAX_STEPS:  # 종료 조건 확인
@@ -161,24 +169,39 @@ def train():
         loss.backward()
         optimizer.step()
 
-        print("Episode: {}/{}, Score: {}, Clear lines: {}, Blocks(Actions): {}".format(
+        print("Episode: {}/{}, Score: {}, Clear lines: {}, Blocks(Actions): {}, Cumulative Reward: {}, Episode Length: {}".format(
             epoch,
             EPOCHS,
             final_score,
             final_cleared_lines,
             final_num_pieces,
+            total_reward,
+            step_count
             ))
+
+        # 누적 보상 및 에피소드 길이 기록
+        cumulative_rewards.append(total_reward)
+        episode_lengths.append(step_count)
 
         # 텐서보드에 기록
         writer.add_scalar('Train/Score', final_score, epoch)
         writer.add_scalar('Train/Tetrominoes', final_num_pieces, epoch)
         writer.add_scalar('Train/Cleared_lines', final_cleared_lines, epoch)
+        writer.add_scalar('Train/Cumulative_Reward', total_reward, epoch)
+        writer.add_scalar('Train/Episode_Length', step_count, epoch)
 
-        # 모델 저장
+        # 500 epoch마다 모델 저장
         if epoch > 0 and epoch % SAVE_INTERVAL == 0:
-            torch.save(agent.main_network, "./{}_tetris_model_{}".format(agent.model_name, epoch))
+            torch.save(agent.main_network, "./model/{}/tetris{}_{}".format(agent.model_name, agent.model_name, epoch))
 
-    torch.save(agent.main_network, "./{}_tetris_model".format(agent.model_name))
+    # 전체 에피소드의 평균 보상 및 성공률 계산 및 기록
+    average_reward = np.mean(cumulative_rewards)
+    success_rate = np.mean([1 if length < MAX_STEPS else 0 for length in episode_lengths])
+
+    writer.add_scalar('Train/Average_Reward', average_reward, epoch)
+    writer.add_scalar('Train/Success_Rate', success_rate, epoch)
+
+    torch.save(agent.main_network, "./model/{}/tetris{}_{}".format(agent.model_name, agent.model_name, epoch))
     writer.close()
 
 if __name__ == "__main__":
