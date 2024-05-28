@@ -24,8 +24,8 @@ BLOCK_SIZE = 30
 GAMMA = 0.99
 INITIAL_EPSILON = 1
 FINAL_EPSILON = 1e-3
-DECAY_EPOCHS = 800
-EPOCHS = 1000
+DECAY_EPOCHS = 1000
+EPOCHS = 2000
 BATCH_SIZE = 512
 MAX_STEPS = 1000
 LOG_PATH = "tensorboard"
@@ -194,13 +194,13 @@ def train(model_type):
         loss.backward()
         optimizer.step()
 
-        print("Episode: {}/{}, Score: {}, Clear lines: {}, Blocks(Actions): {}, Cumulative Reward: {}, Episode Length: {}".format(
+        print("Episode: {}/{}, Cleared lines: {}, Score: {}, Cumulative Reward: {}, Tetrominoes: {}, Episode Length: {}".format(
             epoch,
             EPOCHS,
-            final_score,
             final_cleared_lines,
-            final_num_pieces,
+            final_score,
             total_reward,
+            final_num_pieces,
             step_count
             ))
 
@@ -209,10 +209,10 @@ def train(model_type):
         episode_lengths.append(step_count)
 
         # 텐서보드에 기록
-        writer.add_scalar('Train/Score', final_score, epoch)
-        writer.add_scalar('Train/Tetrominoes', final_num_pieces, epoch)
         writer.add_scalar('Train/Cleared_lines', final_cleared_lines, epoch)
+        writer.add_scalar('Train/Score', final_score, epoch)
         writer.add_scalar('Train/Cumulative_Reward', total_reward, epoch)
+        writer.add_scalar('Train/Tetrominoes', final_num_pieces, epoch)
         writer.add_scalar('Train/Episode_Length', step_count, epoch)
 
         # 500 epoch마다 모델 저장
@@ -220,12 +220,9 @@ def train(model_type):
             os.makedirs("./model/{}".format(agent.model_name), exist_ok=True)
             torch.save(agent.main_network, "./model/{}/tetris{}_{}".format(agent.model_name, agent.model_name, epoch))
 
-    # 전체 에피소드의 평균 보상 및 성공률 계산 및 기록
+    # 전체 에피소드의 평균 보상 기록
     average_reward = np.mean(cumulative_rewards)
-    success_rate = np.mean([1 if length < MAX_STEPS else 0 for length in episode_lengths])
-
     writer.add_scalar('Train/Average_Reward', average_reward, epoch)
-    writer.add_scalar('Train/Success_Rate', success_rate, epoch)
 
     os.makedirs("./model/{}".format(agent.model_name), exist_ok=True)
     torch.save(agent.main_network, "./model/{}/tetris{}_final".format(agent.model_name, agent.model_name))
