@@ -212,7 +212,7 @@ class Tetris:
             board = [[0 for _ in range(self.width)]] + board
         return board
 
-    def step(self, action, render=True, video=None):
+    def step(self, action, render=True):
         x, num_rotations = action
         self.current_pos = {"x": x, "y": 0}
         for _ in range(num_rotations):
@@ -227,7 +227,7 @@ class Tetris:
             else:
                 self.current_pos["y"] += 1
             if render and self.render_mode:
-                self.render(video)
+                self.render()
 
         overflow = self.truncate(self.piece, self.current_pos)
         if overflow:
@@ -247,7 +247,7 @@ class Tetris:
 
         return score, self.gameover
 
-    def render(self, video=None):
+    def render(self):
         self.screen.fill(self.bg_color)
 
         for y in range(self.height):
@@ -284,8 +284,3 @@ class Tetris:
         self.screen.blit(text_lines, (self.width * self.block_size + 10, 130))
 
         pygame.display.flip()
-
-        if video:
-            img = pygame.surfarray.array3d(self.screen)
-            img = img.swapaxes(0, 1)
-            video.write(img)

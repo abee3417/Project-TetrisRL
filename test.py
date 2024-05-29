@@ -1,59 +1,59 @@
-import argparse
 import torch
-import cv2
 from tetris import Tetris
 
-MODEL_NAME = "Qdeep" # Qsimp, Qdeep, Qdoub
-EPOCH = 500 # 테스트하고싶은 모델의 epoch 입력
+# 전역 변수 설정
+MODEL_NAME = "Qdoub"  # 테스트하고 싶은 모델 이름 입력 (Qsimp/Qdeep/Qdoub)
+EPOCH = 3000  # 테스트하고 싶은 모델의 epoch 값 입력
+WIDTH = 10  # 모든 이미지의 공통 너비
+HEIGHT = 20  # 모든 이미지의 공통 높이
+BLOCK_SIZE = 30  # 블록 크기
+FPS = 30  # 초당 프레임 수
+SAVED_PATH = "trained_models"  # 저장된 모델 경로
+RENDER = True  # 렌더링 여부
+DROP_SPEED = 0.01  # 블록 낙하 속도
 
-def get_args():
-    parser = argparse.ArgumentParser(
-        """Implementation of Deep Q Network to play Tetris""")
-
-    parser.add_argument("--width", type=int, default=10, help="The common width for all images")
-    parser.add_argument("--height", type=int, default=20, help="The common height for all images")
-    parser.add_argument("--block_size", type=int, default=30, help="Size of a block")
-    parser.add_argument("--fps", type=int, default=300, help="frames per second")
-    parser.add_argument("--saved_path", type=str, default="trained_models")
-    parser.add_argument("--output", type=str, default="output.mp4")
-
-    args = parser.parse_args()
-    return args
-
-
-def test(opt):
+def test():
+    # CUDA 사용 가능 여부에 따라 랜덤 시드 설정
     if torch.cuda.is_available():
         torch.cuda.manual_seed(123)
     else:
         torch.manual_seed(123)
+    
+    # CUDA 사용 가능 여부에 따라 모델 로드
     if torch.cuda.is_available():
-        model = torch.load("./model/{}/tetris{}_{}".format(MODEL_NAME, MODEL_NAME, EPOCH))
+        model = torch.load(f"./model/{MODEL_NAME}/tetris{MODEL_NAME}_{EPOCH}")
     else:
-        model = torch.load("./model/{}/tetris{}_{}".format(MODEL_NAME, MODEL_NAME, EPOCH), map_location=lambda storage, loc: storage)
-    model.eval()
-    env = Tetris(width=opt.width, height=opt.height, block_size=opt.block_size, drop_speed=0, render=True)
-    env.reset()
+        model = torch.load(f"./model/{MODEL_NAME}/tetris{MODEL_NAME}_{EPOCH}", map_location=lambda storage, loc: storage)
+    
+    model.eval()  # 모델을 평가 모드로 설정
+    # Tetris 환경 설정
+    env = Tetris(width=WIDTH, height=HEIGHT, block_size=BLOCK_SIZE, drop_speed=DROP_SPEED, render=RENDER)
+    env.reset()  # 환경 초기화
+    
+    # CUDA 사용 가능 여부에 따라 모델을 CUDA로 이동
     if torch.cuda.is_available():
         model.cuda()
-    out = cv2.VideoWriter(opt.output, cv2.VideoWriter_fourcc(*"MJPG"), opt.fps,
-                          (int(1.5*opt.width*opt.block_size), opt.height*opt.block_size))
+    
+    # 게임 루프 시작
     while True:
-        next_steps = env.get_next_states()
+        next_steps = env.get_next_states()  # 다음 상태 얻기
         next_actions, next_states = zip(*next_steps.items())
         next_states = torch.stack(next_states)
+        
         if torch.cuda.is_available():
             next_states = next_states.cuda()
-        predictions = model(next_states)[:, 0]
+            
+        predictions = model(next_states)[:, 0]  # 모델 예측
         index = torch.argmax(predictions).item()
         action = next_actions[index]
-        _, done = env.step(action, render=True, video=out)
+        _, done = env.step(action, render=True)  # 행동 수행 및 렌더링
 
+        # 게임 종료 조건
         if done:
-            out.release()
+            print(f'\nTraining Model: {MODEL_NAME}')
+            print(f'Epoch: {EPOCH}')
+            print(f'Cleared Lines: {env.cleared_lines} | Score(Reward_cum): {env.score} | Pieces(Episode_len): {env.tetrominoes}\n')
             break
-        
-
 
 if __name__ == "__main__":
-    opt = get_args()
-    test(opt)
+    test()
