@@ -24,12 +24,12 @@ BLOCK_SIZE = 30
 GAMMA = 0.99
 INITIAL_EPSILON = 1
 FINAL_EPSILON = 1e-3
-DECAY_EPOCHS = 1000
-EPOCHS = 2000
+DECAY_EPOCHS = 1500
+EPOCHS = 3000
 BATCH_SIZE = 512
 MAX_STEPS = 1000
 LOG_PATH = "tensorboard"
-SAVE_INTERVAL = 500
+SAVE_INTERVAL = 200
 DROP_SPEED = 0  # 블록이 떨어지는 속도 (초), 0 설정시 비활성화
 
 class Agent:
@@ -148,7 +148,7 @@ def train(model_type):
             total_reward += reward  # 누적 보상 업데이트
             step_count += 1  # 행동 수 증가
 
-            if done or step_count >= MAX_STEPS:  # 종료 조건 확인
+            if done:  # 종료 조건 확인 # or step_count >= MAX_STEPS
                 final_score = env.score
                 final_num_pieces = env.tetrominoes
                 final_cleared_lines = env.cleared_lines
