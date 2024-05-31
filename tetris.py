@@ -43,7 +43,7 @@ class Tetris:
         (0, 0, 255)
     ]
 
-    def __init__(self, height=20, width=10, block_size=20, drop_speed=1.0, render=True):
+    def __init__(self, height=20, width=10, block_size=20, drop_speed=1.0, render=True, test_mode=False):
         self.height = height
         self.width = width
         self.block_size = block_size
@@ -54,6 +54,7 @@ class Tetris:
         self.screen_width = self.width * self.block_size + self.extra_board_width
         self.screen_height = self.height * self.block_size
         self.render_mode = render
+        self.test_mode = test_mode
 
         self.reset()
 
@@ -244,6 +245,8 @@ class Tetris:
             self.new_piece()
         if self.gameover:
             self.score -= 2
+            if self.test_mode:
+                self.render_game_over()  # 게임 오버 상태 렌더링
 
         return score, self.gameover
 
@@ -284,3 +287,48 @@ class Tetris:
         self.screen.blit(text_lines, (self.width * self.block_size + 10, 130))
 
         pygame.display.flip()
+
+    def render_game_over(self):
+        # test.py 실행 중일때 게임 끝나는 화면 구현
+        self.screen.fill(self.bg_color)
+
+        for y in range(self.height):
+            for x in range(self.width):
+                color = self.piece_colors[self.board[y][x]]
+                pygame.draw.rect(self.screen, color,
+                                 (x * self.block_size, y * self.block_size, self.block_size, self.block_size))
+                pygame.draw.rect(self.screen, (0, 0, 0),
+                                 (x * self.block_size, y * self.block_size, self.block_size, self.block_size), 1)
+
+        for y in range(len(self.piece)):
+            for x in range(len(self.piece[y])):
+                if self.piece[y][x]:
+                    color = self.piece_colors[self.piece[y][x]]
+                    pygame.draw.rect(self.screen, color,
+                                     ((x + self.current_pos["x"]) * self.block_size,
+                                      (y + self.current_pos["y"]) * self.block_size,
+                                      self.block_size, self.block_size))
+                    pygame.draw.rect(self.screen, (0, 0, 0),
+                                     ((x + self.current_pos["x"]) * self.block_size,
+                                      (y + self.current_pos["y"]) * self.block_size,
+                                      self.block_size, self.block_size), 1)
+
+        font = pygame.font.SysFont("Consolas", 20)
+        game_over_text = font.render("Game over!", True, self.text_color)
+        text_score = font.render(f"Score: {self.score}", True, self.text_color)
+        text_pieces = font.render(f"Pieces: {self.tetrominoes}", True, self.text_color)
+        text_lines = font.render(f"Lines: {self.cleared_lines}", True, self.text_color)
+
+        self.screen.blit(game_over_text, (self.width * self.block_size + 10, 10))
+        self.screen.blit(text_score, (self.width * self.block_size + 10, 70))
+        self.screen.blit(text_pieces, (self.width * self.block_size + 10, 100))
+        self.screen.blit(text_lines, (self.width * self.block_size + 10, 130))
+
+        pygame.display.flip()
+        
+        while self.test_mode and self.gameover:
+            for event in pygame.event.get():
+                if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
+                    pygame.quit()
+                    return
+            self.clock.tick(10)

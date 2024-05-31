@@ -17,7 +17,7 @@ from tetris import Tetris
 # 파라미터 설정
 SEED = 42
 USE_CUDA = True
-RENDER = False  # 트레이닝 과정 테트리스 출력 여부
+RENDER = True  # 트레이닝 과정 테트리스 출력 여부
 WIDTH = 10
 HEIGHT = 20
 BLOCK_SIZE = 30
@@ -95,7 +95,7 @@ def train(model_type):
         raise ValueError("모델이 존재하지 않습니다.")
 
     # 테트리스 환경 및 에이전트 초기화
-    env = Tetris(width=WIDTH, height=HEIGHT, block_size=BLOCK_SIZE, drop_speed=DROP_SPEED, render=RENDER)
+    env = Tetris(width=WIDTH, height=HEIGHT, block_size=BLOCK_SIZE, drop_speed=DROP_SPEED, render=RENDER, test_mode=False)
     agent = Agent(model_class, device)
 
     # 텐서보드 로깅 설정

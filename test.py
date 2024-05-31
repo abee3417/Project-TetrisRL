@@ -27,7 +27,7 @@ def test():
     
     model.eval()  # 모델을 평가 모드로 설정
     # Tetris 환경 설정
-    env = Tetris(width=WIDTH, height=HEIGHT, block_size=BLOCK_SIZE, drop_speed=DROP_SPEED, render=RENDER)
+    env = Tetris(width=WIDTH, height=HEIGHT, block_size=BLOCK_SIZE, drop_speed=DROP_SPEED, render=RENDER, test_mode=True)
     env.reset()  # 환경 초기화
     
     # CUDA 사용 가능 여부에 따라 모델을 CUDA로 이동
