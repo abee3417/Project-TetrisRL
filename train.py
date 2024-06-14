@@ -72,7 +72,7 @@ class Agent:
 
 def get_args():
     import argparse
-    parser = argparse.ArgumentParser(description="Train Tetris DQN agent")
+    parser = argparse.ArgumentParser(description="Train Tetris agent")
     parser.add_argument("--model", type=str, choices=["simple", "deep", "double"], required=True, help="3가지 모델 중 선택하기")
     args = parser.parse_args()
     return args
@@ -161,29 +161,48 @@ def train(model_type):
             agent.update_target()
 
         epoch += 1
-        state_batch, reward_batch, next_state_batch, done_batch = agent.get_minibatch()
-        state_batch, reward_batch, next_state_batch = state_batch.to(device), reward_batch.to(device), next_state_batch.to(device)
 
-        q_values = agent.main_network(state_batch)
+        # Simple Q-learning
+        if model_type == "simple":
+            with torch.no_grad():
+                # next state의 max Q 계산
+                next_q_values = agent.main_network(next_state.unsqueeze(0)).max(1)[0].unsqueeze(1)
+            # 현재 state Q 계산
+            q_values = agent.main_network(state.unsqueeze(0)).squeeze(1)
+            # 실제 Q(y_batch) 계산
+            y_batch = reward + GAMMA * next_q_values * (1 - done)
+        else:
+            # 미니배치
+            state_batch, reward_batch, next_state_batch, done_batch = agent.get_minibatch()
+            state_batch, reward_batch, next_state_batch = state_batch.to(device), reward_batch.to(device), next_state_batch.to(device)
 
-        agent.main_network.eval()
-        with torch.no_grad():
-            if model_type == "double":
-                # Double Q-learning: main_network와 target_network를 모두 사용하여 업데이트
-                next_main_predictions = agent.main_network(next_state_batch)
-                next_target_predictions = agent.target_q_network(next_state_batch)
-                max_action_indexes = torch.argmax(next_main_predictions, dim=1)
-                next_q_values = next_target_predictions.gather(1, max_action_indexes.unsqueeze(1))
-            else:
-                # 일반 Q-learning: target_network의 최대 Q-value 사용
-                next_q_values = agent.target_q_network(next_state_batch).max(1)[0].unsqueeze(1)
+            # 현재 state Q 계산
+            q_values = agent.main_network(state_batch)
+
+            agent.main_network.eval()
+            with torch.no_grad():
+                # Double DQN
+                if model_type == "double":
+                    # next state에서 Q를 main_network에서 계산
+                    next_main_predictions = agent.main_network(next_state_batch)
+                    # target network에서의 Q 계산
+                    next_target_predictions = agent.target_q_network(next_state_batch)
+                    max_action_indexes = torch.argmax(next_main_predictions, dim=1)
+                    next_q_values = next_target_predictions.gather(1, max_action_indexes.unsqueeze(1))
+                # DQN
+                elif model_type == "deep":
+                    # next state의 max Q 계산
+                    next_q_values = agent.target_q_network(next_state_batch).max(1)[0].unsqueeze(1)
+            agent.main_network.train()
+            y_batch = reward_batch + GAMMA * next_q_values * (1 - torch.tensor(done_batch, dtype=torch.float32).to(device).unsqueeze(1))
 
         agent.main_network.train()
-        y_batch = reward_batch + (1 - torch.tensor(done_batch, dtype=torch.float32).to(device).unsqueeze(1)) * GAMMA * next_q_values
 
         # q_values와 y_batch의 크기를 맞춰줌
-        q_values = q_values.squeeze(1)
-        y_batch = y_batch.squeeze(1)
+        if q_values.dim() > 1:
+            q_values = q_values.squeeze(1)
+        if y_batch.dim() > 1:
+            y_batch = y_batch.squeeze(1)
 
         optimizer.zero_grad()
         loss = criterion(q_values, y_batch)
